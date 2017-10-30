@@ -4,7 +4,7 @@ import tensorflow as tf
 
 
 # get the name and id of labels
-label_file = open('/home/alala/Projects/part_constellation_models_tensorflow/data/plane23/label.txt','r')
+label_file = open('/home/alala/Projects/part_constellation_models_tensorflow/data/plane23/label.txt', 'r')
 lines = label_file.readlines()
 labels = []
 imgdir_list = []
@@ -14,7 +14,8 @@ for line in lines:
     label_name = line.split()[1]
     labels.append([label_id, label_name])
 
-def train_data(file_dir, crop_w, crop_h):
+
+def get_data_list(file_dir):
 
     image_list = []
     label_list = []
@@ -54,6 +55,11 @@ def train_data(file_dir, crop_w, crop_h):
     label_list = list(temp[:, 1])
     label_list = [int(i) for i in label_list]
 
+    return image_list, label_list
+
+
+def get_batch(image_list, label_list, crop_w, crop_h, batch_size, capacity):
+
     # change it's type
     image_list = tf.cast(image_list, tf.string)
     label_list = tf.cast(label_list, tf.int32)
@@ -71,9 +77,13 @@ def train_data(file_dir, crop_w, crop_h):
     # crop the image
     image_list = tf.image.resize_image_with_crop_or_pad(image_list, crop_w, crop_h)
 
-    return image_list, label_list
+    # get batch
+    image_batch, label_batch = tf.train.batch([image_list, label_list],
+                                              batch_size=batch_size,
+                                              num_threads=32,
+                                              capacity=capacity)
 
+    label_batch = tf.reshape(label_batch, [batch_size])
+    image_batch = tf.cast(image_batch, tf.float32)
 
-if __name__ == '__main__':
-    train_dir = './data/plane23/train'
-    train_data(train_dir, 227, 227)
+    return image_batch, label_batch

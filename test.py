@@ -1,10 +1,17 @@
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
+import get_input_data as inputdata
+
+crop_w = crop_h = 227
+batch_size = 64
+capacity = 256
+
 # load data
-# import input_data
-# mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
-mnist = input_data.read_data_sets("MNIST_data", one_hot=True)
+#mnist = input_data.read_data_sets("MNIST_data", one_hot=True)
+train_dir = './data/plane23/train'
+train_data, train_label = inputdata.get_data_list(train_dir)
+train_data_batch, train_label_batch = inputdata.get_batch(train_data,train_label,crop_w,crop_h,batch_size,capacity)
 
 # define some paras
 learning_rate = 0.001
@@ -12,8 +19,8 @@ training_iters = 200000
 batch_size = 64
 display_step = 20
 
-n_input = 784 # dimension of input data
-n_classes = 10 # dimension of label
+n_input = 51529 # dimension of input data
+n_classes = 23 # dimension of label
 dropout = 0.8 # probablity of dropout
 
 # placeholder
@@ -34,7 +41,7 @@ def norm(name, l_input, lsize=4):
 # define the net
 def alex_net(_X, _weights, _biases, _dropout):
     # turn vector to matrix
-    _X = tf.reshape(_X, shape=[-1, 28, 28, 1])
+    _X = tf.reshape(_X, shape=[-1, 227, 227, 3])
 
     # conv
     conv1 = conv2d('conv1', _X, _weights['wc1'], _biases['bc1'])
@@ -80,7 +87,7 @@ weights = {
     'wc3': tf.Variable(tf.random_normal([3, 3, 128, 256])),
     'wd1': tf.Variable(tf.random_normal([4*4*256, 1024])),
     'wd2': tf.Variable(tf.random_normal([1024, 1024])),
-    'out': tf.Variable(tf.random_normal([1024, 10]))
+    'out': tf.Variable(tf.random_normal([1024, 23]))
 }
 biases = {
     'bc1': tf.Variable(tf.random_normal([64])),
@@ -120,7 +127,9 @@ with tf.Session() as sess:
     step = 1
     # Keep training until reach max iterations
     while step * batch_size < training_iters:
-        batch_xs, batch_ys = mnist.train.next_batch(batch_size)
+        #batch_xs, batch_ys = mnist.train.next_batch(batch_size)
+        batch_xs = train_data_batch
+        batch_ys = train_label_batch
         # get a batch
         sess.run(optimizer, feed_dict={x: batch_xs, y: batch_ys, keep_prob: dropout})
         if step % display_step == 0:
@@ -135,4 +144,4 @@ with tf.Session() as sess:
     summary_writer.add_summary(summary_str, step)
     print ("Optimization Finished!")
     # calculate the test accuracy
-    print ("Testing Accuracy:", sess.run(accuracy, feed_dict={x: mnist.test.images[:256], y: mnist.test.labels[:256], keep_prob: 1.}))
+    #print ("Testing Accuracy:", sess.run(accuracy, feed_dict={x: mnist.test.images[:256], y: mnist.test.labels[:256], keep_prob: 1.}))
