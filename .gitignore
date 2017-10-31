@@ -1,3 +1,6 @@
 *~
 /data
 /.idea
+/finetune_alexnet
+*.pyc
+/MNIST_data
