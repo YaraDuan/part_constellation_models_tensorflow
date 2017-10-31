@@ -1,313 +1,351 @@
 import tensorflow as tf
-import numpy as np
-import get_input_data as inputdata
-from datetime import datetime
 import os
+import get_input_data as input
+from datetime import datetime
+import numpy as np
 
-FLAGS = tf.app.flags.FLAGS
+#x = tf.placeholder(tf.float32, [batch_size, 227, 227, 3])
+#y = tf.placeholder(tf.float32, [None, num_classes])
 
-class AlexNet(object):
-    def __init__(self, x, keep_prob, num_classes, skip_layer,
-                 weights_path='DEFAULT'):
+class network(object):
 
-        # Parse input arguments into class variables
-        self.X = x
-        self.NUM_CLASSES = num_classes
-        self.KEEP_PROB = keep_prob
-        self.SKIP_LAYER = skip_layer
+    def inference(self,images):
 
-        if weights_path == 'DEFAULT':
-            self.WEIGHTS_PATH = 'bvlc_alexnet.npy'
-        else:
-            self.WEIGHTS_PATH = weights_path
+      #  images = tf.reshape(images, shape=[-1, 39,39, 3])
 
-        # Call the create function to build the computational graph of AlexNet
-        self.create()
+        images = tf.reshape(images, shape=[-1, 227,227, 3])# [batch, in_height, in_width, in_channels]
 
-    def create(self):
+        #images=(tf.cast(images,tf.float32)/255.-0.5)*2
 
-        # 1st Layer: Conv (w ReLu) -> Pool -> Lrn
-        conv1 = self.conv(self.X, 11, 11, 96, 4, 4, padding='VALID', name='conv1') # (55,55,96)
-        pool1 = self.max_pool(conv1, 3, 3, 2, 2, padding='VALID', name='pool1')# (27,27,96)
-        norm1 = self.lrn(pool1, 2, 2e-05, 0.75, name='norm1')#(27,27,96)
 
-        # 2nd Layer: Conv (w ReLu) -> Pool -> Lrn with 2 groups
-        conv2 = self.conv(norm1, 5, 5, 256, 1, 1, groups=2, name='conv2') #(27,27,256)
-        pool2 = self.max_pool(conv2, 3, 3, 2, 2, padding='VALID', name='pool2')#(13,13,256)
-        norm2 = self.lrn(pool2, 2, 2e-05, 0.75, name='norm2')#(13,13,256)
+        # first layer
 
-        # 3rd Layer: Conv (w ReLu)
-        conv3 = self.conv(norm2, 3, 3, 384, 1, 1, name='conv3')#(13,13,384)
+        conv1=tf.nn.bias_add(tf.nn.conv2d(images, self.weights['conv1'], strides=[1, 4, 4, 1], padding='VALID'),
 
-        # 4th Layer: Conv (w ReLu) splitted into two groups
-        conv4 = self.conv(conv3, 3, 3, 384, 1, 1, groups=2, name='conv4')#(13,13,192) and (13,13,192)
+                             self.biases['conv1'])
 
-        # 5th Layer: Conv (w ReLu) -> Pool splitted into two groups
-        conv5 = self.conv(conv4, 3, 3, 256, 1, 1, groups=2, name='conv5')#(13,13,128)and(13,13,128)
-        pool5 = self.max_pool(conv5, 3, 3, 2, 2, padding='VALID', name='pool5')#(6,6,256)
 
-        # 6th Layer: Flatten -> FC (w ReLu) -> Dropout
-        flattened = tf.reshape(pool5, [-1, 6 * 6 * 256])#turn into one line
-        fc6 = self.fc(flattened, 6 * 6 * 256, 4096, name='fc6')
-        dropout6 = self.dropout(fc6, self.KEEP_PROB)#(-1,4096)
 
-        # 7th Layer: FC (w ReLu) -> Dropout
-        fc7 = self.fc(dropout6, 4096, 4096, name='fc7')
-        dropout7 = self.dropout(fc7, self.KEEP_PROB)#(4096)
+        relu1= tf.nn.relu(conv1)
 
-        # 8th Layer: FC and return unscaled activations (for tf.nn.softmax_cross_entropy_with_logits)
-        self.fc8 = self.fc(dropout7, 4096, self.NUM_CLASSES, relu=False, name='fc8')#(-1,2)
+        pool1=tf.nn.max_pool(relu1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID')
 
-        return self.fc8
+        # second layer
+        conv2=tf.nn.bias_add(tf.nn.conv2d(pool1, self.weights['conv2'], strides=[1, 1, 1, 1], padding='SAME'),
 
-    def load_initial_weights(self, session):
-        """
-        As the weights from http://www.cs.toronto.edu/~guerzhoy/tf_alexnet/ come
-        as a dict of lists (e.g. weights['conv1'] is a list) and not as dict of
-        dicts (e.g. weights['conv1'] is a dict with keys 'weights' & 'biases') we
-        need a special load function
-        """
+                             self.biases['conv2'])
+        relu2= tf.nn.relu(conv2)
+        pool2=tf.nn.max_pool(relu2, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID')
 
-        # Load the weights into memory
-        weights_dict = np.load(self.WEIGHTS_PATH, encoding='bytes').item()
+        # thrid layer
+        conv3=tf.nn.bias_add(tf.nn.conv2d(pool2, self.weights['conv3'], strides=[1, 1, 1, 1], padding='SAME'),
 
-        # Loop over all layer names stored in the weights dict
-        for op_name in weights_dict:
+                             self.biases['conv3'])
+        relu3= tf.nn.relu(conv3)
 
-            # Check if the layer is one of the layers that should be reinitialized
-            if op_name not in self.SKIP_LAYER:
+        # fourth layer
+        conv4=tf.nn.bias_add(tf.nn.conv2d(relu3, self.weights['conv4'], strides=[1, 1, 1, 1], padding='SAME'),
 
-                with tf.variable_scope(op_name, reuse=True):
+                             self.biases['conv4'])
+        relu4= tf.nn.relu(conv4)
 
-                    # Loop over list of weights/biases and assign them to their corresponding tf variable
-                    for data in weights_dict[op_name]:
+        # fifth layer
+        conv5=tf.nn.bias_add(tf.nn.conv2d(relu4, self.weights['conv5'], strides=[1, 1, 1, 1], padding='SAME'),
 
-                        # Biases
-                        if len(data.shape) == 1:
-                            var = tf.get_variable('biases', trainable=False)
-                            session.run(var.assign(data))
-                        # Weights
-                        else:
-                            var = tf.get_variable('weights', trainable=False)
-                            session.run(var.assign(data))
+                             self.biases['conv5'])
 
-    def conv(self, x, filter_height, filter_width, num_filters, stride_y, stride_x, name,
-             padding='SAME', groups=1):
-        """
-        Adapted from: https://github.com/ethereon/caffe-tensorflow
-        """
-        # Get number of input channels
-        input_channels = int(x.get_shape()[-1])
+        relu5= tf.nn.relu(conv5)
+        pool5=tf.nn.max_pool(relu5, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID')
 
-        # Create lambda function for the convolution
-        convolve = lambda i, k: tf.nn.conv2d(i, k,
-                                             strides=[1, stride_y, stride_x, 1],
-                                             padding=padding)
+        # fc6
+        flatten = tf.reshape(pool5, [-1, self.weights['fc1'].get_shape().as_list()[0]])
+        drop1=tf.nn.dropout(flatten,0.5)
+        fc1=tf.matmul(drop1, self.weights['fc1'])+self.biases['fc1']
+        fc_relu1=tf.nn.relu(fc1)
 
-        with tf.variable_scope(name) as scope:
-            # Create tf variables for the weights and biases of the conv layer
-            weights = tf.get_variable('weights',
-                                      shape=[filter_height, filter_width, input_channels / groups, num_filters])
-            biases = tf.get_variable('biases', shape=[num_filters])
+        # fc7
+        fc2 = tf.matmul(fc_relu1, self.weights['fc2'])+self.biases['fc2']
+        fc_relu2 = tf.nn.relu(fc2)
 
-            if groups == 1:
-                conv = convolve(x, weights)
+        # fc8
+        fc3 = tf.matmul(fc_relu2, self.weights['fc3'])+self.biases['fc3']
 
-            # In the cases of multiple groups, split inputs & weights and
-            else:
-                # Split input and weights and convolve them separately
-                input_groups = tf.split(axis=3, num_or_size_splits=groups, value=x)
-                weight_groups = tf.split(axis=3, num_or_size_splits=groups, value=weights)
-                output_groups = [convolve(i, k) for i, k in zip(input_groups, weight_groups)]
+        return fc3
 
-                # Concat the convolved output together again
-                conv = tf.concat(axis=3, values=output_groups)
+    def __init__(self):
 
-            # Add biases
-            bias = tf.reshape(tf.nn.bias_add(conv, biases), conv.get_shape().as_list())
+        # init weight and b
 
-            # Apply relu function
-            relu = tf.nn.relu(bias, name=scope.name)
+        with tf.variable_scope("weights"):
 
-            return relu
+           self.weights={
 
-    def max_pool(self, x, filter_height, filter_width, stride_y, stride_x, name, padding='SAME'):
-        return tf.nn.max_pool(x, ksize=[1, filter_height, filter_width, 1],
-                              strides=[1, stride_y, stride_x, 1],
-                              padding=padding, name=name)
+                #39*39*3->36*36*20->18*18*20
 
-    def lrn(self, x, radius, alpha, beta, name, bias=1.0):
-        return tf.nn.local_response_normalization(x, depth_radius=radius, alpha=alpha,
-                                                  beta=beta, bias=bias, name=name)
+                'conv1':tf.get_variable('conv1',[11,11,3,96],initializer=tf.contrib.layers.xavier_initializer_conv2d()),
 
-    def dropout(self, x, keep_prob):
-        return tf.nn.dropout(x, keep_prob)
+                #18*18*20->16*16*40->8*8*40
 
-    def fc(self, x, num_in, num_out, name, relu=True):
-        with tf.variable_scope(name) as scope:
+                'conv2':tf.get_variable('conv2',[5,5,96,256],initializer=tf.contrib.layers.xavier_initializer_conv2d()),
 
-            # Create tf variables for the weights and biases
-            weights = tf.get_variable('weights', shape=[num_in, num_out], trainable=True)
-            biases = tf.get_variable('biases', [num_out], trainable=True)
+                #8*8*40->6*6*60->3*3*60
 
-            # Matrix multiply weights and inputs and add bias
-            act = tf.nn.xw_plus_b(x, weights, biases, name=scope.name)
+                'conv3':tf.get_variable('conv3',[3,3,256,384],initializer=tf.contrib.layers.xavier_initializer_conv2d()),
 
-            if relu == True:
-                # Apply ReLu non linearity
-                relu = tf.nn.relu(act)
-                return relu
-            else:
-                return act
+                #3*3*60->120
+
+                'conv4':tf.get_variable('conv4',[3,3,384,384],initializer=tf.contrib.layers.xavier_initializer_conv2d()),
+
+
+
+                'conv5':tf.get_variable('conv5',[3,3,384,256],initializer=tf.contrib.layers.xavier_initializer_conv2d()),
+
+
+
+
+
+                'fc1':tf.get_variable('fc1',[6*6*256,4096],initializer=tf.contrib.layers.xavier_initializer()),
+
+                'fc2':tf.get_variable('fc2',[4096,4096],initializer=tf.contrib.layers.xavier_initializer()),
+
+
+
+                #120->6
+
+                'fc3':tf.get_variable('fc3',[4096,23],initializer=tf.contrib.layers.xavier_initializer()),
+
+                }
+
+        with tf.variable_scope("biases"):
+
+            self.biases={
+
+                'conv1':tf.get_variable('conv1',[96,],initializer=tf.constant_initializer(value=0.0, dtype=tf.float32)),
+
+                'conv2':tf.get_variable('conv2',[256,],initializer=tf.constant_initializer(value=0.0, dtype=tf.float32)),
+
+                'conv3':tf.get_variable('conv3',[384,],initializer=tf.constant_initializer(value=0.0, dtype=tf.float32)),
+
+                'conv4':tf.get_variable('conv4',[384,],initializer=tf.constant_initializer(value=0.0, dtype=tf.float32)),
+
+                'conv5':tf.get_variable('conv5',[256,],initializer=tf.constant_initializer(value=0.0, dtype=tf.float32)),
+
+
+
+                'fc1':tf.get_variable('fc1',[4096,],initializer=tf.constant_initializer(value=0.0, dtype=tf.float32)),
+
+                'fc2':tf.get_variable('fc2',[4096,],initializer=tf.constant_initializer(value=0.0, dtype=tf.float32)),
+
+                'fc3':tf.get_variable('fc3',[23,],initializer=tf.constant_initializer(value=0.0, dtype=tf.float32))
+
+
+
+            }
+
+
+    def inference_test(self,images):
+
+        # turn vector to matrix
+
+        images = tf.reshape(images, shape=[-1, 39,39, 3])# [batch, in_height, in_width, in_channels]
+
+        images=(tf.cast(images,tf.float32)/255.-0.5)*2
+
+
+        # first layer
+
+        conv1=tf.nn.bias_add(tf.nn.conv2d(images, self.weights['conv1'], strides=[1, 1, 1, 1], padding='VALID'),
+
+                             self.biases['conv1'])
+
+
+
+        relu1= tf.nn.relu(conv1)
+
+        pool1=tf.nn.max_pool(relu1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
+
+
+        # second layer
+
+        conv2=tf.nn.bias_add(tf.nn.conv2d(pool1, self.weights['conv2'], strides=[1, 1, 1, 1], padding='VALID'),
+
+                             self.biases['conv2'])
+
+        relu2= tf.nn.relu(conv2)
+
+        pool2=tf.nn.max_pool(relu2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
+
+
+        # third layer
+
+        conv3=tf.nn.bias_add(tf.nn.conv2d(pool2, self.weights['conv3'], strides=[1, 1, 1, 1], padding='VALID'),
+
+                             self.biases['conv3'])
+
+        relu3= tf.nn.relu(conv3)
+
+        pool3=tf.nn.max_pool(relu3, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
+
+
+
+
+
+        # fully connected layers 1
+
+        flatten = tf.reshape(pool3, [-1, self.weights['fc1'].get_shape().as_list()[0]])
+
+
+
+        fc1=tf.matmul(flatten, self.weights['fc1'])+self.biases['fc1']
+
+        fc_relu1=tf.nn.relu(fc1)
+
+
+        fc2=tf.matmul(fc_relu1, self.weights['fc2'])+self.biases['fc2']
+
+        return fc2
+
+    def sorfmax_loss(self,predicts,labels):
+
+        predicts=tf.nn.softmax(predicts)
+
+        labels=tf.one_hot(labels,self.weights['fc3'].get_shape().as_list()[1])
+
+        loss = tf.nn.softmax_cross_entropy_with_logits(logits=predicts, labels=labels)
+
+      #  loss =-tf.reduce_mean(labels * tf.log(predicts))# tf.nn.softmax_cross_entropy_with_logits(predicts, labels)
+
+        self.cost= tf.reduce_mean(loss)
+
+        return self.cost
+
+    # gradient
+    def optimer(self,loss,lr=0.01):
+
+        train_optimizer = tf.train.GradientDescentOptimizer(lr).minimize(loss)
+
+        return train_optimizer
+
+    # calculate accuracy
+    def accuracy(self, predicts, labels):
+
+        labels = tf.one_hot(labels, self.weights['fc3'].get_shape().as_list()[1])
+        correct_pred = tf.equal(tf.argmax(predicts, 1), tf.argmax(labels, 1))
+        acc = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+
+        return acc
+
+
 
 
 def train():
 
-    '''
-    # params of model
-    tf.app.flags.DEFINE_integer('batch_size', 128,
-                                """Number of images to process in a batch.""")
+    root_dir = "/Users/Alala/Projects/part_constellation_models_tensorflow"
 
-    tf.app.flags.DEFINE_string('train_file', 'D:\\train_file.txt',
-                               """Path to the  train data directory.""")
-    tf.app.flags.DEFINE_string('val_file', 'D:\\val_file.txt',
-                               """Path to the  val data directory.""")
-    # tf.app.flags.DEFINE_integer('max_steps',10000,"""Number of batches to run.""")
-    '''
-
-    # global var
-
-    keep_p = 0.5
-    IMAGE_SIZE = 227
-    NUM_CLASSES = 23
-    BATCH_SIZE = 64
-    lr = 0.01
-    NUM_EPOCH = 10
-    train_layers = ['fc8', 'fc7']
+    # params
+    batch_size = 64
+    num_classes = 23
+    num_epochs = 20
 
     # How often we want to write the tf.summary data to disk
-    display_step = 1
+    display_step = 20
 
-    filewriter_path = '../../alexnet_logs'
-    checkpoint_path = '../../alexnet_logs'
+    # Path for tf.summary.FileWriter and to store model checkpoints
+    filewriter_path = root_dir + "/finetune_alexnet/plane23"
+    checkpoint_path = root_dir + "/finetune_alexnet/"
 
-    # TF placeholder for graph input and output
-    x = tf.placeholder(tf.float32, [BATCH_SIZE, IMAGE_SIZE, IMAGE_SIZE, 3])
-    y = tf.placeholder(tf.float32, [None, NUM_CLASSES])
-    keep_prob = tf.placeholder(tf.float32)
+    # Create parent path if it doesn't exist
+    if not os.path.isdir(checkpoint_path): os.mkdir(checkpoint_path)
+    if not os.path.isdir(filewriter_path): os.mkdir(filewriter_path)
 
-    # init the model
-    model = AlexNet(x, keep_prob, NUM_CLASSES, train_layers)
+    # create the network
+    net = network()
 
-    score = model.fc8
+    # get data
+    train_dir = root_dir + "/data/plane23/train"
+    image_list, label_list=input.get_data_list(train_dir)
+    batch_image,batch_label = input.get_batch(image_list,label_list,227,227,64,256)
 
-    #var_list = [v for v in tf.trainable_variables() if v.name.split('/')[0] in train_layers]
+    inf = net.inference(batch_image)
 
-    # loss
-    with tf.name_scope('cross_ent'):
-        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=score, labels=y))
+    # calculate loss
+    loss=net.sorfmax_loss(inf,batch_label)
+    opti=net.optimer(loss)
 
+    # test net
+    accuracy = net.accuracy(inf, batch_label)
 
-    # train op
-    with tf.name_scope('train'):
-        #gradients = tf.gradients(loss, var_list)
-        #gradients = list(zip(gradients, var_list))
+    # Merge all summaries together
+    merged_summary = tf.summary.merge_all()
 
-        # define the loss function and learnning rate
-        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model, labels=y))
-        optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(cost)
-        train_op = optimizer
-
-        #optimizer = tf.train.GradientDescentOptimizer(lr)
-        #train_op = optimizer.apply_gradients(grads_and_vars=gradients)
-
-    '''
-    # add gradients to summary
-    for gradient, var in gradients:
-        tf.summary.histogram(var.name + '/gradients', gradient)
-    # add the variables we train to the summary
-    for var in var_list:
-        tf.summary.histogram(var.name, var)
-    '''
-
-    # add the loss to summary
-    tf.summary.scalar('cross_entropy', loss)
-
-    # evaluation op: accuarcy
-    with tf.name_scope('accuracy')as scope:
-        correct_pred = tf.equal(tf.argmax(score, 1), tf.argmax(y, 1))
-        accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-
-    # Add accuracy into summary
-    tf.summary.scalar('accuracy', accuracy)
-
-    merged = tf.summary.merge_all()
-
-    # init
+    # Initialize the FileWriter
     writer = tf.summary.FileWriter(filewriter_path)
+
+    # Initialize an saver for store model checkpoints
     saver = tf.train.Saver()
 
-    # load data
-    #train_generator = ImageDataGenerator(FLAGS.train_file, horizontal_flip=True, shuffle=True)
-    #val_generator = ImageDataGenerator(FLAGS.val_file, shuffle=False)
-    # train_image,train_label=inputs(FLAGS.datadir,FLAGS.batch_size)
-    # test_image,test_label=inputs(FLAGS.datadir,FLAGS.batch_size,shuffle=False)
-    image_list, label_list = inputdata.get_data_list('../../data/plane23/train')
-
-    train_batches_per_epoch = np.floor(image_list.size / FLAGS.batch_size).astype(np.int16)
-    #val_batches_per_epoch = np.floor(val_generator.size / FLAGS.batch_size).astype(np.int16)
+    init = tf.initialize_all_variables()
 
     with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
+
+        sess.run(init)
+
+        coord = tf.train.Coordinator()
+
+        image_list, label_list = input.get_data_list(train_dir)
+        batch_image, batch_label = input.get_batch(image_list, label_list, 227, 227, 64, 256)
+
+        threads = tf.train.start_queue_runners(coord=coord)
+
+        # Add the model graph to TensorBoard
         writer.add_graph(sess.graph)
-        model.load_initial_weights(sess)
-        print("{} start training..".format(datetime.now()))
-        print("{} Open Tensorboard at --logdir {}".format(datetime.now(),
-                                                          filewriter_path))
 
-        for epoch in range(NUM_EPOCH):
+        print("{} Start training...".format(datetime.now()))
+        print("{} Open Tensorboard at --logdir {}".format(datetime.now(),filewriter_path))
+
+        # Loop over number of epochs
+        for epoch in range(num_epochs):
+
+            train_batches_per_epoch = np.floor(len(image_list) / batch_size).astype(np.int16)
+
             print("{} Epoch number: {}".format(datetime.now(), epoch + 1))
+
             step = 1
+
+            # train_batches_per_epoch
             while step < train_batches_per_epoch:
-                # get a batch
-                batch_xs, batch_ys = inputdata.get_batch(image_list,label_list,227,227,64,256)
 
-                # train
-                sess.run(train_op, feed_dict={x: batch_xs, y: batch_ys, keep_prob: keep_p})
+                loss_np, _, label_np, image_np, inf_np = sess.run([loss, opti, batch_image, batch_label, inf])
 
-                # generate summary
+                # Generate summary with the current batch of data and write to file
                 if step % display_step == 0:
-                    s = sess.run(merged, feed_dict={x: batch_xs,
-                                                    y: batch_ys,
-                                                    keep_prob: 1.})
-                    writer.add_summary(s, epoch * train_batches_per_epoch + step)
+
+                    acc = sess.run([accuracy, batch_image, batch_label, inf])
+
+                    print "Iter " + str(step * batch_size) + ", Minibatch Loss= " + "{:.6f}".format(loss_np) + ", Training Accuracy= " + "{:.5f}".format(acc[0])
+
+                    #s = sess.run([merged_summary, batch_image, batch_label, inf])
+                    #writer.add_summary(s, epoch * train_batches_per_epoch + step)
+
                 step += 1
 
-            print 'finished train'
-
-            '''
-            # validate the model on the entire validation set
-            print('{} Start validation'.format(datetime.now()))
-            test_acc = 0
-            test_count = 0
-            for _ in range(val_batches_per_epoch):
-                batch_tx, batch_ty = val_generator.next_batch(FLAGS.batch_size)
-                acc = sess.run(accuracy, feed_dict={x: batch_tx, y: batch_ty, keep_prob: 1.})
-                test_acc += acc
-            test_acc /= test_count
-            print('Validation Accuracy =%f' % test_acc)
-
-            # reset the file pointer of the image data generator
-            val_generator.reset_pointer()
-            train_generator.reset_pointer()
-            print('{}Saving checkpoint of model..'.format(datetime.now()))
-            '''
+            print("{} Saving checkpoint of model...".format(datetime.now()))
 
             # save checkpoint of the model
-            checkpoint_name = os.path.join(checkpoint_path, 'model_epoch' + str(epoch + 1) + '.ckpt')
-            save_path = saver.save(sess, checkpoint_name)
+            checkpoint_name = os.path.join(checkpoint_path, 'model_epoch' + str(epoch) + '.ckpt')
+            saver.save(sess, checkpoint_name)
+
             print("{} Model checkpoint saved at {}".format(datetime.now(), checkpoint_name))
+
+        print ("Optimization Finished!")
+
+        coord.request_stop()
+
+        coord.join(threads)
+
+
 
 
 if __name__ == '__main__':
+
     train()

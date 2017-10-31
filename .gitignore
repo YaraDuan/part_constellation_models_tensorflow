@@ -4,3 +4,4 @@
 /finetune_alexnet
 *.pyc
 /MNIST_data
+/alexnet_logs
