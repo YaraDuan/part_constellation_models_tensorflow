@@ -5,6 +5,7 @@ import tensorflow as tf
 
 # get the name and id of labels
 label_file = open('/home/alala/Projects/part_constellation_models_tensorflow/data/plane23/label.txt', 'r')
+#label_file = open('/Users/Alala/Projects/part_constellation_models_tensorflow/data/plane23/label.txt', 'r')
 lines = label_file.readlines()
 labels = []
 imgdir_list = []
@@ -19,6 +20,7 @@ def get_data_list(file_dir):
 
     image_list = []
     label_list = []
+    imgdir_list = []
 
     for dirpath, dirs, files in os.walk(file_dir):
         for dir in dirs:
@@ -76,6 +78,9 @@ def get_batch(image_list, label_list, crop_w, crop_h, batch_size, capacity):
 
     # crop the image
     image_list = tf.image.resize_image_with_crop_or_pad(image_list, crop_w, crop_h)
+
+    # sub mean
+    image_list = tf.image.per_image_standardization(image_list)
 
     # get batch
     image_batch, label_batch = tf.train.batch([image_list, label_list],

@@ -205,7 +205,7 @@ class network(object):
 
         return fc2
 
-    def sorfmax_loss(self,predicts,labels):
+    def sorfmax_loss(self, predicts, labels):
 
         predicts=tf.nn.softmax(predicts)
 
@@ -229,9 +229,18 @@ class network(object):
     # calculate accuracy
     def accuracy(self, predicts, labels):
 
+        acc = tf.nn.in_top_k(predicts, labels, 1)
+
+        acc = tf.cast(acc, tf.float32)
+
+        acc = tf.reduce_mean(acc)
+
+        '''
         labels = tf.one_hot(labels, self.weights['fc3'].get_shape().as_list()[1])
         correct_pred = tf.equal(tf.argmax(predicts, 1), tf.argmax(labels, 1))
         acc = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+        
+        '''
 
         return acc
 
@@ -240,7 +249,7 @@ class network(object):
 
 def train():
 
-    root_dir = "/Users/Alala/Projects/part_constellation_models_tensorflow"
+    root_dir = "/home/alala/Projects/part_constellation_models_tensorflow"
 
     # params
     batch_size = 64
@@ -249,6 +258,7 @@ def train():
 
     # How often we want to write the tf.summary data to disk
     display_step = 20
+    max_iter = 10000
 
     # Path for tf.summary.FileWriter and to store model checkpoints
     filewriter_path = root_dir + "/finetune_alexnet/plane23"
@@ -292,9 +302,6 @@ def train():
 
         coord = tf.train.Coordinator()
 
-        image_list, label_list = input.get_data_list(train_dir)
-        batch_image, batch_label = input.get_batch(image_list, label_list, 227, 227, 64, 256)
-
         threads = tf.train.start_queue_runners(coord=coord)
 
         # Add the model graph to TensorBoard
@@ -303,47 +310,55 @@ def train():
         print("{} Start training...".format(datetime.now()))
         print("{} Open Tensorboard at --logdir {}".format(datetime.now(),filewriter_path))
 
-        # Loop over number of epochs
-        for epoch in range(num_epochs):
+        try:
+            # Loop over number of epochs
+            for epoch in range(num_epochs):
 
-            train_batches_per_epoch = np.floor(len(image_list) / batch_size).astype(np.int16)
+                #image_list, label_list = input.get_data_list(train_dir)
+                #batch_image, batch_label = input.get_batch(image_list, label_list, 227, 227, 64, 256)
 
-            print("{} Epoch number: {}".format(datetime.now(), epoch + 1))
+                train_batches_per_epoch = np.floor(len(image_list) / batch_size).astype(np.int16)
 
-            step = 1
+                print("{} Epoch number: {}".format(datetime.now(), epoch + 1))
 
-            # train_batches_per_epoch
-            while step < train_batches_per_epoch:
+                step = 1
 
-                loss_np, _, label_np, image_np, inf_np = sess.run([loss, opti, batch_image, batch_label, inf])
+                # train_batches_per_epoch
+                while step < max_iter:
 
-                # Generate summary with the current batch of data and write to file
-                if step % display_step == 0:
+                    loss_np, opti_np = sess.run([loss, opti])
 
-                    acc = sess.run([accuracy, batch_image, batch_label, inf])
+                    # Generate summary with the current batch of data and write to file
+                    if step % display_step == 0:
 
-                    print "Iter " + str(step * batch_size) + ", Minibatch Loss= " + "{:.6f}".format(loss_np) + ", Training Accuracy= " + "{:.5f}".format(acc[0])
+                        acc = sess.run([accuracy])
+
+                        print "Iter " + str(step * batch_size) + ", Minibatch Loss= " + "{:.6f}".format(loss_np) + ", Training Accuracy= " + "{:.5f}".format(acc[0])
 
                     #s = sess.run([merged_summary, batch_image, batch_label, inf])
                     #writer.add_summary(s, epoch * train_batches_per_epoch + step)
 
-                step += 1
+                    step += 1
 
-            print("{} Saving checkpoint of model...".format(datetime.now()))
+                print("{} Saving checkpoint of model...".format(datetime.now()))
 
-            # save checkpoint of the model
-            checkpoint_name = os.path.join(checkpoint_path, 'model_epoch' + str(epoch) + '.ckpt')
-            saver.save(sess, checkpoint_name)
+                # save checkpoint of the model
+                checkpoint_name = os.path.join(checkpoint_path, 'model_epoch' + str(epoch) + '.ckpt')
+                saver.save(sess, checkpoint_name)
 
-            print("{} Model checkpoint saved at {}".format(datetime.now(), checkpoint_name))
+                print("{} Model checkpoint saved at {}".format(datetime.now(), checkpoint_name))
 
-        print ("Optimization Finished!")
+        except tf.errors.OutOfRangeError:
 
-        coord.request_stop()
+            print ("Optimization Finished!")
+
+        finally:
+
+            coord.request_stop()
 
         coord.join(threads)
 
-
+        sess.close()
 
 
 if __name__ == '__main__':
