@@ -5,3 +5,4 @@
 *.pyc
 /MNIST_data
 /alexnet_logs
+*._.DS_Store*
