@@ -335,8 +335,8 @@ def train():
 
                         print "Iter " + str(step * batch_size) + ", Minibatch Loss= " + "{:.6f}".format(loss_np) + ", Training Accuracy= " + "{:.5f}".format(acc[0])
 
-                    #s = sess.run([merged_summary, batch_image, batch_label, inf])
-                    #writer.add_summary(s, epoch * train_batches_per_epoch + step)
+                    s = sess.run([merged_summary])
+                    writer.add_summary(s, epoch * max_iter + step)
 
                     step += 1
 
@@ -359,6 +359,13 @@ def train():
         coord.join(threads)
 
         sess.close()
+
+
+def finetune(image, weights):
+
+    # get images one by one
+    image_list, label_list = input.get_data_list(image)
+    image_batch, label_batch = input.get_batch(image_list, label_list, 227, 227, 1, 256)
 
 
 if __name__ == '__main__':
