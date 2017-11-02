@@ -1,5 +1,4 @@
 *~
-/data
 /.idea
 /finetune_alexnet/*
 *.pyc
@@ -7,3 +6,7 @@
 /alexnet_logs
 *._.DS_Store*
 /finetune_alexnet
+/data/plane23/test
+/data/plane23/train
+/data/plane23/V8
+/data/plane23/val
