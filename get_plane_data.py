@@ -66,16 +66,37 @@ class GetPlaneImage:
         and labels and loads the images into them into memory
         """
 
-        if self.pointer== len(self.labels):
+        # prevent index out of bounds and read the data recursively
+        if self.pointer == len(self.labels):
+            self.reset_pointer()
+            paths = self.images[self.pointer:self.pointer + batch_size]
+            labels = self.labels[self.pointer:self.pointer + batch_size]
+
+            # update pointer
+            self.pointer += batch_size
+
+        elif self.pointer > len(self.labels):
+            last_pointer = self.pointer - batch_size
+
+            diff = self.pointer - len(self.labels)
+
+            paths = self.images[last_pointer:len(self.labels)]
+            labels = self.labels[last_pointer:len(self.labels)]
+
             self.reset_pointer()
 
+            for i in range(diff):
+                paths.append(self.images[self.pointer])
+                labels.append(self.labels[self.pointer])
+                self.pointer += 1
 
-        # Get next batch of image (path) and labels
-        paths = self.images[self.pointer:self.pointer + batch_size]
-        labels = self.labels[self.pointer:self.pointer + batch_size]
+        else:
+            # Get next batch of image (path) and labels
+            paths = self.images[self.pointer:self.pointer + batch_size]
+            labels = self.labels[self.pointer:self.pointer + batch_size]
 
-        # update pointer
-        self.pointer += batch_size
+            # update pointer
+            self.pointer += batch_size
 
         # Read images
         images = np.ndarray([batch_size, self.scale_size[0], self.scale_size[1], 3])
@@ -102,5 +123,24 @@ class GetPlaneImage:
 
             # return array of images and labels
 
-
         return images, one_hot_labels
+
+# test
+"""
+def getData():
+
+    class_list = '/home/alala/Projects/part_constellation_models_tensorflow/data/plane23/train.txt'
+
+    data = GetPlaneImage(class_list)
+
+    data.pointer = 4938
+
+    img, label = data.next_batch(64)
+
+    print data.images
+
+
+if __name__ == '__main__':
+
+    getData()
+"""

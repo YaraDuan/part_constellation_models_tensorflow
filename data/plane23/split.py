@@ -74,12 +74,12 @@ for imginfo in imgdir_list:
 			print dir
 			print root
 			if index % 5 == 0:
-				line = img_root + train_class_dir + '/' + file + ' ' + str(class_num) + '\n'
+				line = img_root + test_class_dir + '/' + file + ' ' + str(class_num) + '\n'
 				test.write(line)
 				dst_dir = test_class_dir + '/' + file
 				shutil.copyfile(os.path.join(imgpath,file), dst_dir)
 			else:
-				line = img_root + test_class_dir + '/' + file + ' ' + str(class_num) + '\n'
+				line = img_root + train_class_dir + '/' + file + ' ' + str(class_num) + '\n'
 				train.write(line)
 				dst_dir = train_class_dir + '/' + file
 				shutil.copyfile(os.path.join(imgpath, file), dst_dir)
