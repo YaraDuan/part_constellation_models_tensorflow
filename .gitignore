@@ -11,3 +11,5 @@
 /data/plane23/V8
 /data/plane23/val
 /data/MNIST_data
+*imagenet-vgg-verydeep-19.mat*
+/results

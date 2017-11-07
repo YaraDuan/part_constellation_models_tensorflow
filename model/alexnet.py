@@ -44,21 +44,21 @@ class network(object):
         relu3= tf.nn.relu(conv3)
 
         # fourth layer
-        conv4=tf.nn.bias_add(tf.nn.conv2d(relu3, self.weights['conv4'], strides=[1, 1, 1, 1], padding='SAME'),
+        conv4 = tf.nn.bias_add(tf.nn.conv2d(relu3, self.weights['conv4'], strides=[1, 1, 1, 1], padding='SAME'),
 
                              self.biases['conv4'])
-        relu4= tf.nn.relu(conv4)
+        relu4 = tf.nn.relu(conv4)
 
         # fifth layer
-        conv5=tf.nn.bias_add(tf.nn.conv2d(relu4, self.weights['conv5'], strides=[1, 1, 1, 1], padding='SAME'),
+        conv5 = tf.nn.bias_add(tf.nn.conv2d(relu4, self.weights['conv5'], strides=[1, 1, 1, 1], padding='SAME'),
 
                              self.biases['conv5'])
 
-        relu5= tf.nn.relu(conv5)
-        pool5=tf.nn.max_pool(relu5, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID')
+        relu5 = tf.nn.relu(conv5)
+        self.pool5 = tf.nn.max_pool(relu5, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID')
 
         # fc6
-        flatten = tf.reshape(pool5, [-1, self.weights['fc1'].get_shape().as_list()[0]])
+        flatten = tf.reshape(self.pool5, [-1, self.weights['fc1'].get_shape().as_list()[0]])
         drop1=tf.nn.dropout(flatten,0.5)
         fc1=tf.matmul(drop1, self.weights['fc1'])+self.biases['fc1']
         fc_relu1=tf.nn.relu(fc1)
@@ -244,6 +244,11 @@ class network(object):
 
         return acc
 
+    def load_initial_weights(self, weights, session):
+
+        weights.dict = np.load(weights, encoding= 'bytes').item()
+
+
 
 
 
@@ -361,13 +366,88 @@ def train():
         sess.close()
 
 
-def finetune(image, weights):
+def finetune():
 
-    # get images one by one
-    image_list, label_list = input.get_data_list(image)
-    image_batch, label_batch = input.get_batch(image_list, label_list, 227, 227, 1, 256)
+    root_dir = "/home/alala/Projects/part_constellation_models_tensorflow"
+
+    # params
+    num_classes = 23
+    num_epochs = 20
+    display_step = 20
+    max_iter = 10000
+    batch_size = 1
+
+    # Path for tf.summary.FileWriter and to store model checkpoints
+    filewriter_path = root_dir + "/finetune_alexnet/plane23"
+    checkpoint_path = root_dir + "/finetune_alexnet/"
+
+    # Create parent path if it doesn't exist
+    if not os.path.isdir(checkpoint_path): os.mkdir(checkpoint_path)
+    if not os.path.isdir(filewriter_path): os.mkdir(filewriter_path)
+
+    # create the network
+    net = network()
+
+    # get data
+    train_dir = root_dir + "/data/plane23/train"
+    image_list, label_list = input.get_data_list(train_dir)
+    batch_image, batch_label = input.get_batch(image_list, label_list, 227, 227, 1, 256)
+
+
+
+    inf = net.inference(batch_image)
+
+    pool5 = net.pool5
+
+    dim1 = pool5.get_shape().as_list()[0]
+    dim2 = pool5.get_shape().as_list()[1]
+    dim3 = pool5.get_shape().as_list()[2]
+    dim4 = pool5.get_shape().as_list()[3]
+
+    labels_to_one = np.ndarray([dim1, dim2, dim3, dim4])
+
+    for i in range(dim1):
+        for j in range(dim2):
+            for m in range(dim3):
+                for n in range(dim4):
+                    labels_to_one[i][j][m][n] = 1
+
+
+    # calculate loss
+    loss = net.sorfmax_loss(inf, batch_label)
+    opti = net.optimer(loss)
+
+    # test net
+    accuracy = net.accuracy(inf, batch_label)
+
+    # Merge all summaries together
+    merged_summary = tf.summary.merge_all()
+
+    # Initialize the FileWriter
+    writer = tf.summary.FileWriter(filewriter_path)
+
+    # Initialize an saver for store model checkpoints
+    saver = tf.train.Saver()
+
+    init = tf.initialize_all_variables()
+
+    with tf.Session() as sess:
+
+        sess.run(init)
+
+        coord = tf.train.Coordinator()
+
+        threads = tf.train.start_queue_runners(coord=coord)
+
+        saver.restore(sess, )
+
+        coord.request_stop()
+
+        coord.join(threads)
+
+        sess.close()
 
 
 if __name__ == '__main__':
 
-    train()
+    finetune()
