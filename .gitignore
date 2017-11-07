@@ -13,3 +13,5 @@
 /data/MNIST_data
 *imagenet-vgg-verydeep-19.mat*
 /results
+*planenet2_mean.binaryproto*
+*.DS_Store*
