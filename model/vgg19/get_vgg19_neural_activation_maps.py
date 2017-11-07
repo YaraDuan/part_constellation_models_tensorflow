@@ -4,10 +4,10 @@ import scipy.io
 import scipy.misc
 import os
 
-IMAGE_W = 800
-IMAGE_H = 600
+IMAGE_W = 227
+IMAGE_H = 227
 ROOT = '/home/alala/Projects/part_constellation_models_tensorflow'
-CONTENT_IMG = ROOT + '/images/Taipei101.jpg'
+CONTENT_IMG = ROOT + '/images/plane.jpg'
 STYLE_IMG = ROOT + '/images/StarryNight.jpg'
 OUTOUT_DIR = ROOT + '/results'
 OUTPUT_IMG = 'results.png'
@@ -77,6 +77,7 @@ def build_content_loss(p, x):
 
 def get_loss(p,x):
     print p
+    print x
     label = np.ndarray([p.shape[0], p.shape[1], p.shape[2], p.shape[3]])
     for i in range(p.shape[0]):
         for j in range(p.shape[1]):
@@ -88,6 +89,18 @@ def get_loss(p,x):
     return loss
 
 
+def get_label(sess,layer):
+    p5 = sess.run(layer)
+    label = np.ndarray([p5.shape[0], p5.shape[1], p5.shape[2], p5.shape[3]], dtype='float32')
+    for i in range(p5.shape[0]):
+        for j in range(p5.shape[1]):
+            for m in range(p5.shape[2]):
+                for n in range(p5.shape[3]):
+                    label[i][j][m][n] = p5[i][j][m][n]
+    label = label + 1
+    return label
+
+
 def read_image(path):
     image = scipy.misc.imread(path)
     image = scipy.misc.imresize(image, (IMAGE_H, IMAGE_W))
@@ -97,9 +110,13 @@ def read_image(path):
 
 
 def write_image(path, image):
+    """
     image = image + MEAN_VALUES
     image = image[0]
     image = np.clip(image, 0, 255).astype('uint8')
+    """
+    image = image.astype('uint8')
+
     scipy.misc.imsave(path, image)
 
 
@@ -111,22 +128,40 @@ def main():
 
     sess.run([net['input'].assign(content_img)])
 
-    cost_content = sum(map(lambda l,: l[1] * build_content_loss(sess.run(net[l[0]]), net[l[0]]), CONTENT_LAYERS))
+    #cost_content = sum(map(lambda l,: l[1] * build_content_loss(sess.run(net[l[0]]), net[l[0]]), CONTENT_LAYERS))
 
-    loss = get_loss(sess.run(net[LAYERS[0]]), net[LAYERS[0]])
+    # get pool5
+    pool5 = net['pool5']
 
-    optimizer = tf.train.AdamOptimizer(2.0)
+    # get label
+    label = get_label(sess, pool5)
+
+    # get loss
+    loss = label - pool5
+
+    #loss = get_loss(sess.run(net[LAYERS[0]]), net[LAYERS[0]])
+
+    optimizer = tf.train.GradientDescentOptimizer(1.0)
 
     train = optimizer.minimize(loss)
-    sess.run(tf.initialize_all_variables())
+    #sess.run(tf.initialize_all_variables())
 
     if not os.path.exists(OUTOUT_DIR):
         os.mkdir(OUTOUT_DIR)
 
     for i in range(ITERATION):
+        loss = sess.run(loss)
+        print loss
         sess.run(train)
-        result_img = sess.run(net['input'])
-        #print sess.run(loss)
+        gradients = sess.run(net['input'])
+
+        gradients_abs = np.abs(gradients)
+
+        result_img = np.sum(gradients_abs, axis=3)
+
+        result_img = result_img[0]
+
+        # print sess.run(loss)
         write_image(os.path.join(OUTOUT_DIR, '%s.png' % (str(i).zfill(4))), result_img)
 
     write_image(os.path.join(OUTOUT_DIR, OUTPUT_IMG), result_img)
