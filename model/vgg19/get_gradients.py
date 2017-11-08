@@ -5,12 +5,13 @@ import scipy.misc
 import os
 from pylab import *
 
-IMAGE_W = 800
-IMAGE_H = 600
+IMAGE_W = 254
+IMAGE_H = 254
 ROOT = '/home/alala/Projects/part_constellation_models_tensorflow'
-CONTENT_IMG = ROOT + '/images/Taipei101.jpg'
+CONTENT_IMG = ROOT + '/images/plane.jpg'
 OUTOUT_DIR = ROOT + '/results'
 OUTPUT_IMG = 'results.png'
+OUTPUT_MAT = 'results.mat'
 VGG_MODEL = 'imagenet-vgg-verydeep-19.mat'
 INI_NOISE_RATIO = 0.7
 STYLE_STRENGTH = 500
@@ -89,7 +90,7 @@ def get_loss(p, x):
     return loss
 
 
-def get_label(sess, layer):
+def get_label(sess,layer):
     p5 = sess.run(layer)
     label = np.ndarray([p5.shape[0], p5.shape[1], p5.shape[2], p5.shape[3]], dtype='float32')
     for i in range(p5.shape[0]):
@@ -123,39 +124,35 @@ def write_image(path, image):
 def main():
     net = build_vgg19(VGG_MODEL)
     sess = tf.Session()
-    sess.run(tf.initialize_all_variables())
+    sess.run(tf.global_variables_initializer())
     content_img = read_image(CONTENT_IMG)
 
     sess.run([net['input'].assign(content_img)])
 
     # get pool5
+
     pool5 = net['pool5']
 
-    # get label
-    label = get_label(sess, pool5)
+    output = tf.gradients(pool5, net['input'])
 
-    # get loss
-    loss = label - pool5
+    grad = sess.run(output)
 
-    optimizer = tf.train.GradientDescentOptimizer(1.0)
-
-    train = optimizer.minimize(loss)
-
-    if not os.path.exists(OUTOUT_DIR):
-        os.mkdir(OUTOUT_DIR)
-
-
-    sess.run(train)
-
-    gradients = sess.run(net['input'])
-
-    gradients_abs = np.abs(gradients[0])
+    gradients_abs = np.abs(grad[0])
 
     result_img = np.sum(gradients_abs, axis=3)
 
-    result_img = result_img[0]
+    scipy.io.savemat(os.path.join(OUTOUT_DIR,OUTPUT_MAT), {'gradients':result_img[0]})
 
+
+
+
+
+    result_img = result_img[0]
+    # imshow(result_img)
+    # print sess.run(loss)
     write_image(os.path.join(OUTOUT_DIR, OUTPUT_IMG), result_img)
+
+    sess.close()
 
 
 if __name__ == '__main__':
