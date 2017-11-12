@@ -2,13 +2,17 @@ import tensorflow as tf
 import numpy as np
 import scipy.io
 import scipy.misc
+from scipy import ndimage
 import os
+import cv2
 from pylab import *
+from PIL import Image, ImageDraw
+import matplotlib.pyplot as plt
 
-IMAGE_W = 254
-IMAGE_H = 254
+IMAGE_W = 800
+IMAGE_H = 600
 ROOT = '/home/alala/Projects/part_constellation_models_tensorflow'
-CONTENT_IMG = ROOT + '/images/plane.jpg'
+CONTENT_IMG = ROOT + '/images/Taipei101.jpg'
 OUTOUT_DIR = ROOT + '/results'
 OUTPUT_IMG = 'results.png'
 OUTPUT_MAT = 'results.mat'
@@ -69,36 +73,16 @@ def build_vgg19(path):
     return net
 
 
-def build_content_loss(p, x):
-    M = p.shape[1] * p.shape[2]
-    N = p.shape[3]
-    loss = (1. / (2 * N ** 0.5 * M ** 0.5)) * tf.reduce_sum(tf.pow((x - p), 2))
-    return loss
-
-
-def get_loss(p, x):
-    print p
-    print x
-    label = np.ndarray([p.shape[0], p.shape[1], p.shape[2], p.shape[3]])
-    for i in range(p.shape[0]):
-        for j in range(p.shape[1]):
-            for m in range(p.shape[2]):
-                for n in range(p.shape[3]):
-                    label[i][j][m][n] = p[i][j][m][n]
-    label = label + 1
-    loss = tf.reduce_sum(label - x)
-    return loss
-
-
-def get_label(sess,layer):
-    p5 = sess.run(layer)
-    label = np.ndarray([p5.shape[0], p5.shape[1], p5.shape[2], p5.shape[3]], dtype='float32')
-    for i in range(p5.shape[0]):
-        for j in range(p5.shape[1]):
-            for m in range(p5.shape[2]):
-                for n in range(p5.shape[3]):
-                    label[i][j][m][n] = p5[i][j][m][n]
-    label = label + 1
+def get_label(channel_id,layer):
+    label = np.ndarray([layer.shape[0], layer.shape[1], layer.shape[2], layer.shape[3]], dtype='float32')
+    for b in range(layer.shape[0]):
+        for w in range(layer.shape[1]):
+            for h in range(layer.shape[2]):
+                for c in range(layer.shape[3]):
+                    if c == channel_id:
+                        label[b][w][h][c] = 1
+                    else:
+                        label[b][w][h][c] = 0
     return label
 
 
@@ -121,39 +105,108 @@ def write_image(path, image):
     scipy.misc.imsave(path, image)
 
 
-def main():
-    net = build_vgg19(VGG_MODEL)
-    sess = tf.Session()
-    sess.run(tf.global_variables_initializer())
-    content_img = read_image(CONTENT_IMG)
+def get_gradients():
 
-    sess.run([net['input'].assign(content_img)])
+    gmaps = []
 
-    # get pool5
+    batch_size = 64
 
-    pool5 = net['pool5']
+    for batch_id in range(512 / batch_size):
 
-    output = tf.gradients(pool5, net['input'])
+        net = build_vgg19(VGG_MODEL)
+        sess = tf.Session()
+        sess.run(tf.global_variables_initializer())
+        content_img = read_image(CONTENT_IMG)
 
-    grad = sess.run(output)
+        sess.run([net['input'].assign(content_img)])
 
-    gradients_abs = np.abs(grad[0])
+        # get pool5
+        pool5 = net['pool5']
 
-    result_img = np.sum(gradients_abs, axis=3)
+        for i in range(batch_size):
+            init = get_label((batch_size * batch_id + i), pool5)
 
-    scipy.io.savemat(os.path.join(OUTOUT_DIR,OUTPUT_MAT), {'gradients':result_img[0]})
+            # get gradients
+            output = tf.gradients(pool5 * init, net['input'])
+            grad = sess.run(output)
+
+            gmaps.append(grad[0][0])
+
+            print batch_size * batch_id + i
+
+        sess.close()
+
+    #gmaps = np.random.randint(-5,5,(512,IMAGE_W,IMAGE_W,3))
+
+    return gmaps
 
 
+def fitGMMToGradient(gmap):
+
+    if len(np.where(gmap[:] != 0)):
+
+        gmap = ndimage.gaussian_filter(gmap, 3)
+
+        ys, xs = np.where(np.max(gmap[:]) == gmap)
+
+        est_x = xs[len(xs)-1]
+        est_y = ys[len(ys)-1]
+    else:
+        est_x = -1
+        est_y = -1
+
+    return est_x, est_y
 
 
+def part_generation():
 
-    result_img = result_img[0]
-    # imshow(result_img)
-    # print sess.run(loss)
-    write_image(os.path.join(OUTOUT_DIR, OUTPUT_IMG), result_img)
+    imagelist = 1
 
-    sess.close()
+    part_locs = []
+    """
+    for i in range(imagelist):
+
+        g = get_gradients()
+
+        for p in range(512):
+
+            gmap = np.squeeze(np.sum(np.abs(g[p]), 2))
+
+            if np.sum(np.isnan(gmap)) > 0 or len(np.where(gmap[:] != 0)[0]) < 1:
+                continue
+
+            est_x, est_y = fitGMMToGradient(gmap)
+
+            if est_x == -1 and est_y == -1:
+                part_locs.append([i, p, est_x, est_y, 0])
+            else:
+                part_locs.append([i, p, est_x, est_y, 1])
+
+    scipy.io.savemat(os.path.join(OUTOUT_DIR, 'part_locs.mat'), {'part_locs': part_locs})
+    """
+    part_locs = scipy.io.loadmat(os.path.join(OUTOUT_DIR, 'part_locs.mat'))
+
+    part_locs = part_locs['part_locs']
+
+    # draw the dots
+    im = plt.imread(CONTENT_IMG)
+    plt.figure(), plt.imshow(im)
+
+    for i in range(len(part_locs)):
+
+        info = part_locs[i]
+
+        x = info[2]
+
+        y = info[3]
+
+        plt.plot(x, y, 'rx')
+
+    plt.show()
+    plt.imsave(os.path.join(OUTOUT_DIR, OUTPUT_IMG), im)
+
+    return part_locs
 
 
-if __name__ == '__main__':
-    main()
+#if __name__ == '__main__':
+#    main()
