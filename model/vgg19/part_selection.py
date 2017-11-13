@@ -1,6 +1,6 @@
 import part_generation as pg
 import numpy as np
-
+import random
 
 def part_selection(part_locs, view_count, iterations, no_selected_parts, no_visible_parts):
 
@@ -69,8 +69,6 @@ def part_selection(part_locs, view_count, iterations, no_selected_parts, no_visi
         model_errors[class_tr_ID, :] = best_err
 
 
-
-
 def do_build_part_models(parts, part_locs, class_tr_ID, no_selected_parts, no_visible_parts, view_count):
 
     part_ids = np.unique(parts['part'])
@@ -100,7 +98,7 @@ def do_build_part_models(parts, part_locs, class_tr_ID, no_selected_parts, no_vi
         s[i][np.random.randint(0, view_count)] = True
 
     for v in range(view_count):
-        init_c = np.random.randint(0, part_count, no_selected_parts)
+        init_c = random.sample(range(part_count), no_selected_parts)
         for j in init_c:
             b[v][j] = 1
 
@@ -116,7 +114,35 @@ def do_build_part_models(parts, part_locs, class_tr_ID, no_selected_parts, no_vi
 
     if ~np.isnan(no_visible_parts):
         for i in range(image_count):
-            print 'h'
+            available_parts = np.where(b[(np.where(s[i])[0]), :][0])[0]
+            selected_visible_parts = [available_parts[x] for x in (random.sample(range(available_parts.size), no_visible_parts))]
+            for j in selected_visible_parts:
+                h[i][j] = 1
+
+    h = np.transpose(np.reshape(parts['visible'], [len(np.unique(parts['part'])), len(np.unique(parts['image']))]))
+    # there need tr_ID
+    h = h[0:len(class_tr_ID), :]
+    i = 0
+
+    done = False
+    best_obj_value = np.inf
+
+    while ~done and np.ceil(np.float(i)/2) < 15:
+        i = i + 1
+        old_b = b
+
+        # image_count * view_count * part_count * coordinates
+        mu_tmp = np.transpose(np.expand_dims(part_locs, 3), [1, 3, 0, 2])
+        a_tmp = np.transpose(np.expand_dims(np.expand_dims(a, 2), 3), [0, 2, 3, 1])
+        d_tmp = np.transpose(np.expand_dims(d, 3), [3, 1, 0, 2])
+
+        if i%2 == 1:
+            mu_a = mu_tmp[..., :] - a_tmp
+            mu_a = np.tile(mu_a, [1, view_count, 1, 1])
+
+            mask = np.zeros([image_count, view_count, part_count])
+            mask = mask[..., :] + np.transpose(np.expand_dims(h, 2), [0, 2, 1])
+            mask = np.tile(np.expand_dims(mask, 3), [1, 1, 1, 2])
 
     h = []
     a = []
