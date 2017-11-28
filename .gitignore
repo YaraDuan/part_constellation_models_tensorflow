@@ -14,3 +14,5 @@
 *imagenet-vgg-verydeep-19.mat*
 *planenet2_mean.binaryproto*
 *.DS_Store*
+/model/vgg19/checkpoints/*
+*imagenet-vgg-verydeep-19.mat*

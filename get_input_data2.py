@@ -3,11 +3,14 @@ import cv2
 
 
 class GetPlaneImage:
-    def __init__(self, class_list, horizontal_flip=False, shuffle=False,
-                 mean=np.array([141., 147., 146.]), scale_size=(227, 227),
-                 nb_classes=23):
+    def __init__(self, dtype, imagedir=None, labeldir=None, class_list=None, horizontal_flip=False, shuffle=False,
+                 mean=np.array([124., 117., 104.]), scale_size=(224, 224),
+                 nb_classes=200):
 
         # Init params
+        self.dtype = dtype
+        self.imagedir = imagedir
+        self.labeldir = labeldir
         self.horizontal_flip = horizontal_flip
         self.n_classes = nb_classes
         self.shuffle = shuffle
@@ -24,24 +27,44 @@ class GetPlaneImage:
         """
         Scan the image file and get the image paths and labels
         """
-        with open(class_list) as f:
-            lines = f.readlines()
-            self.images = []
-            self.labels = []
-            for l in lines:
-                items = l.split()
-                self.images.append(items[0])
-                self.labels.append(int(items[1]))
+        self.images = []
+        self.labels = []
 
-            # store total number of data
-            self.data_size = len(self.labels)
+        if self.dtype == 'plane':
+
+            with open(class_list) as f:
+                lines = f.readlines()
+                for l in lines:
+                    items = l.split()
+                    self.images.append(items[0])
+                    self.labels.append(int(items[1]))
+
+        elif self.dtype == 'CUB_200_2011':
+
+            # get the path of images
+            image_dir = open(self.imagedir, 'r')
+            lines = image_dir.readlines()
+            for line in lines:
+                self.images.append(line.strip('\n'))
+            image_dir.close()
+
+            # get the labels of images
+            labels_dir = open(self.labeldir, 'r')
+            lines = labels_dir.readlines()
+            for line in lines:
+                # label begins at 0
+                self.labels.append(int(line) - 1)
+            labels_dir.close()
+
+        # store total number of data
+        self.data_size = len(self.labels)
 
     def shuffle_data(self):
         """
         Random shuffle the images and labels
         """
-        images = self.images.copy()
-        labels = self.labels.copy()
+        images = self.images
+        labels = self.labels
         self.images = []
         self.labels = []
 
@@ -94,7 +117,6 @@ class GetPlaneImage:
             # Get next batch of image (path) and labels
             paths = self.images[self.pointer:self.pointer + batch_size]
             labels = self.labels[self.pointer:self.pointer + batch_size]
-
             # update pointer
             self.pointer += batch_size
 

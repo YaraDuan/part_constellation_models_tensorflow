@@ -16,36 +16,57 @@ for line in lines:
     labels.append([label_id, label_name])
 
 
-def get_data_list(file_dir):
+def get_data_list(dtype, file_dir, label_dir=None):
 
-    image_list = []
-    label_list = []
-    imgdir_list = []
+    if dtype == 'plane23':
 
-    for dirpath, dirs, files in os.walk(file_dir):
-        for dir in dirs:
-            for label in labels:
-                if dir == label[1]:
-                    imgdir_list.append([os.path.join(file_dir, dir), int(label[0]), label[1]])
-                    break
+        image_list = []
+        label_list = []
+        imgdir_list = []
 
-    imgdir_list.sort(key=lambda x: x[1])
+        for dirpath, dirs, files in os.walk(file_dir):
+            for dir in dirs:
+                for label in labels:
+                    if dir == label[1]:
+                        imgdir_list.append([os.path.join(file_dir, dir), int(label[0]), label[1]])
+                        break
 
-    for imginfo in imgdir_list:
-        imgpath = imginfo[0]
-        class_num = imginfo[1]
+        imgdir_list.sort(key=lambda x: x[1])
 
-        for root, dirs, files in os.walk(imgpath):
+        for imginfo in imgdir_list:
+            imgpath = imginfo[0]
+            class_num = imginfo[1]
 
-            # delete .DS_Store
-            for file in files:
-                if file.startswith('.') and os.path.isfile(os.path.join(imgpath,file)):
-                    files.remove(file)
+            for root, dirs, files in os.walk(imgpath):
 
-            files.sort(key=lambda x: int(x[:-4]))
-            for file in files:
-                image_list.append(os.path.join(imgpath, file))
-                label_list.append(class_num)
+                # delete .DS_Store
+                for file in files:
+                    if file.startswith('.') and os.path.isfile(os.path.join(imgpath, file)):
+                        files.remove(file)
+
+                files.sort(key=lambda x: int(x[:-4]))
+                for file in files:
+                    image_list.append(os.path.join(imgpath, file))
+                    label_list.append(class_num)
+
+    elif dtype == 'CUB_200_2011':
+        image_list = []
+        label_list = []
+
+        # get the path of images
+        image_dir = open(file_dir, 'r')
+        lines = image_dir.readlines()
+        for line in lines:
+            image_list.append(line.strip('\n'))
+        image_dir.close()
+
+        # get the labels of images
+        labels_dir = open(label_dir, 'r')
+        lines = labels_dir.readlines()
+        for line in lines:
+            # label begins at 0
+            label_list.append(int(line)-1)
+        labels_dir.close()
 
     # use shuffle to disrupt the order
     temp = np.array([image_list, label_list])
