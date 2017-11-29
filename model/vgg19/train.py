@@ -5,7 +5,7 @@ import numpy as np
 
 
 # train
-def train(batch_size, save_path, dropoutPro, data_size):
+def train(batch_size, save_path, dropoutPro):
 
     root_dir = "/home/alala/Projects/part_constellation_models_tensorflow"
 
@@ -18,7 +18,7 @@ def train(batch_size, save_path, dropoutPro, data_size):
 
     # Path for tf.summary.FileWriter and to store model checkpoints
     filewriter_path = root_dir + "/model/vgg19/checkpoints/" + save_path
-    checkpoint_path = root_dir + "/model/vgg19/checkpoints/" + save_path +"/models"
+    checkpoint_path = root_dir + "/model/vgg19/checkpoints/" + save_path
 
     # Create parent path if it doesn't exist
     if not os.path.isdir(filewriter_path) : os.mkdir(filewriter_path)
@@ -69,18 +69,16 @@ def train(batch_size, save_path, dropoutPro, data_size):
             # Loop over number of epochs
             for epoch in range(1, num_epochs+1):
 
-                train_batches_per_epoch = np.floor(data_size / batch_size).astype(np.int16)
+                train_batches_per_epoch = np.floor(train_data.data_size / batch_size).astype(np.int16)
 
                 print("{} Epoch number: {}".format(datetime.now(), epoch))
 
                 step = 1
 
                 # train_batches_per_epoch
-                while step < train_batches_per_epoch:
+                while step < train_batches_per_epoch+1:
 
-                    images, labels = input_data.next_batch(batch_size)
-
-                    #images, labels = sess.run([batch_image, batch_label])
+                    images, labels = train_data.next_batch(batch_size)
 
                     sess.run(opti, feed_dict={x: images, y: labels})
 
@@ -105,8 +103,20 @@ def train(batch_size, save_path, dropoutPro, data_size):
                 if epoch % 20 == 0:
                     checkpoint_name = os.path.join(checkpoint_path, 'model_epoch' + str(epoch) + '.ckpt')
                     saver.save(sess, checkpoint_name)
-
                     print("{} Model checkpoint saved at {}".format(datetime.now(), checkpoint_name))
+
+                    # test the model
+                    test_acc = 0
+                    count = 0
+                    test_batches_per_epoch = np.floor(test_data.data_size / batch_size).astype(np.int16)
+                    for i in range(test_batches_per_epoch):
+                        test_images, test_labels = test_data.next_batch(batch_size)
+                        acc = sess.run(accuracy, feed_dict={x: test_images, y: test_labels})
+                        test_acc += acc
+                        count += 1
+
+                    test_acc = test_acc/count
+                    print "{}".format(datetime.now()) + " Test Accuracy= " + "{:.5f}".format(test_acc)
 
         except tf.errors.OutOfRangeError:
 
@@ -136,26 +146,21 @@ if __name__ == '__main__':
 
     # the path to save model
     save_path = "CUB_200_2011"
-    """
-    # get data
-    train_dir = root_dir + "/data/plane23/train"
-    image_list, label_list = input.get_data_list('plane23', train_dir)
-    batch_image, batch_label = input.get_batch(image_list, label_list, crop_w, crop_h, batch_size, 256)
-    """
 
     image_txt = root_dir + "/data/CUB_200_2011/imagelist_absolute.txt"
     label_txt = root_dir + "/data/CUB_200_2011/labels.txt"
-    """
-    image_list, label_list = input.get_data_list('CUB_200_2011', image_txt, label_txt)
-    batch_image, batch_label = input.get_batch(image_list, label_list, crop_w, crop_h, batch_size, 256)
-    """
+    tr_ID_txt = root_dir + "/data/CUB_200_2011/tr_ID.txt"
 
-    # get image
-    input_data = GetPlaneImage(dtype='CUB_200_2011', imagedir=image_txt, labeldir=label_txt, shuffle=True, nb_classes=classNum)
-    data_size = input_data.data_size
+    # get CUB_200_2011 images
+    mean = np.array([124., 127., 110.])
+    train_data = GetPlaneImage(dtype='CUB_200_2011', model='train', imagedir=image_txt, labeldir=label_txt, tr_ID_file=tr_ID_txt, mean=mean, shuffle=True, nb_classes=classNum)
+
+    test_data = GetPlaneImage(dtype='CUB_200_2011', model='test', imagedir=image_txt, labeldir=label_txt, tr_ID_file=tr_ID_txt, mean=mean, shuffle=True, nb_classes=classNum)
+
+    # get plane images
     """
     train_dir = root_dir + "/data/plane23/train.txt"
     input_data = GetPlaneImage(dtype='plane', class_list=train_dir, shuffle=True, mean=np.array([103.438, 113.549, 114.933]), nb_classes=classNum)
     data_size = input_data.data_size
     """
-    train(batch_size, save_path, dropoutPro, data_size)
+    train(batch_size, save_path, dropoutPro)

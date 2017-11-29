@@ -149,6 +149,8 @@ class VGG19(object):
 
         acc = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
+        tf.summary.scalar('accuracy', acc)
+
         return acc
 
 

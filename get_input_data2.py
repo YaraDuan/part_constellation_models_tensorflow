@@ -1,16 +1,18 @@
 import numpy as np
 import cv2
-
+import os
 
 class GetPlaneImage:
-    def __init__(self, dtype, imagedir=None, labeldir=None, class_list=None, horizontal_flip=False, shuffle=False,
+    def __init__(self, dtype, model=None, imagedir=None, labeldir=None, tr_ID_file=None, class_list=None,
+                 horizontal_flip=False, shuffle=False,
                  mean=np.array([124., 117., 104.]), scale_size=(224, 224),
                  nb_classes=200):
 
         # Init params
-        self.dtype = dtype
         self.imagedir = imagedir
         self.labeldir = labeldir
+        self.tr_ID_file = tr_ID_file
+        self.class_list = class_list
         self.horizontal_flip = horizontal_flip
         self.n_classes = nb_classes
         self.shuffle = shuffle
@@ -18,34 +20,40 @@ class GetPlaneImage:
         self.scale_size = scale_size
         self.pointer = 0
 
-        self.read_class_list(class_list)
+        self.read_class_list(dtype, model)
+
+        #self.get_mean()
 
         if self.shuffle:
             self.shuffle_data()
 
-    def read_class_list(self, class_list):
+    def read_class_list(self, dtype, model):
         """
         Scan the image file and get the image paths and labels
         """
+        all_images = []
+        all_labels = []
+        tr_ID = []
+
         self.images = []
         self.labels = []
 
-        if self.dtype == 'plane':
+        if dtype == 'plane':
 
-            with open(class_list) as f:
+            with open(self.class_list) as f:
                 lines = f.readlines()
                 for l in lines:
                     items = l.split()
-                    self.images.append(items[0])
-                    self.labels.append(int(items[1]))
+                    all_images.append(items[0])
+                    all_labels.append(int(items[1]))
 
-        elif self.dtype == 'CUB_200_2011':
+        elif dtype == 'CUB_200_2011':
 
             # get the path of images
             image_dir = open(self.imagedir, 'r')
             lines = image_dir.readlines()
             for line in lines:
-                self.images.append(line.strip('\n'))
+                all_images.append(line.strip('\n'))
             image_dir.close()
 
             # get the labels of images
@@ -53,11 +61,47 @@ class GetPlaneImage:
             lines = labels_dir.readlines()
             for line in lines:
                 # label begins at 0
-                self.labels.append(int(line) - 1)
+                all_labels.append(int(line) - 1)
             labels_dir.close()
 
-        # store total number of data
-        self.data_size = len(self.labels)
+            # get tr_ID
+            for line in open(self.tr_ID_file, 'r').readlines():
+                tr_ID.append(int(line))
+            tr_ID = np.array(tr_ID)
+
+            if model == 'train':
+                index = np.where(tr_ID == 1)
+            elif model == 'test':
+                index = np.where(tr_ID == 0)
+
+            for i in index[0]:
+                self.images.append(all_images[i])
+                self.labels.append(all_labels[i])
+
+            # store total number of data
+            self.data_size = len(self.labels)
+
+    def get_mean(self):
+        img_size = 224
+        sum_r = 0
+        sum_g = 0
+        sum_b = 0
+        count = 0
+
+        for img_path in self.images:
+            img = cv2.imread(img_path)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = cv2.resize(img, (img_size, img_size))
+            sum_r = sum_r + img[:, :, 0].mean()
+            sum_g = sum_g + img[:, :, 1].mean()
+            sum_b = sum_b + img[:, :, 2].mean()
+            count = count + 1
+
+        sum_r = sum_r / count
+        sum_g = sum_g / count
+        sum_b = sum_b / count
+        img_mean = [sum_r, sum_g, sum_b]
+        self.mean = np.array(img_mean)
 
     def shuffle_data(self):
         """
@@ -90,7 +134,7 @@ class GetPlaneImage:
         """
 
         # prevent index out of bounds and read the data recursively
-        if self.pointer == len(self.labels):
+        if (self.pointer+batch_size) == len(self.labels):
             self.reset_pointer()
             paths = self.images[self.pointer:self.pointer + batch_size]
             labels = self.labels[self.pointer:self.pointer + batch_size]
@@ -98,10 +142,10 @@ class GetPlaneImage:
             # update pointer
             self.pointer += batch_size
 
-        elif self.pointer > len(self.labels):
-            last_pointer = self.pointer - batch_size
+        elif (self.pointer+batch_size) > len(self.labels):
+            last_pointer = self.pointer
 
-            diff = self.pointer - len(self.labels)
+            diff = self.pointer + batch_size - len(self.labels)
 
             paths = self.images[last_pointer:len(self.labels)]
             labels = self.labels[last_pointer:len(self.labels)]
