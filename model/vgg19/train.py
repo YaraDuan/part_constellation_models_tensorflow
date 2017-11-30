@@ -11,10 +11,7 @@ def train(batch_size, save_path, dropoutPro):
 
     # params
     num_epochs = 100000
-
-    # How often we want to write the tf.summary data to disk
     display_step = 20
-    max_iter = 10000
 
     # Path for tf.summary.FileWriter and to store model checkpoints
     filewriter_path = root_dir + "/model/vgg19/checkpoints/" + save_path
@@ -75,24 +72,27 @@ def train(batch_size, save_path, dropoutPro):
 
                 step = 1
 
+                avg_loss = 0
+                avg_acc = 0
+
                 # train_batches_per_epoch
                 while step < train_batches_per_epoch+1:
 
                     images, labels = train_data.next_batch(batch_size)
 
-                    sess.run(opti, feed_dict={x: images, y: labels})
+                    _, loss_np, acc = sess.run([opti, loss, accuracy], feed_dict={x: images, y: labels})
 
                     iters = (train_batches_per_epoch * batch_size) * (epoch - 1) + step * batch_size
+
+                    avg_loss += loss_np
+
+                    avg_acc += acc
 
                     # Generate summary with the current batch of data and write to file
                     if step % display_step == 0:
 
-                        loss_np = sess.run(loss, feed_dict={x: images, y: labels})
-
-                        acc = sess.run(accuracy, feed_dict={x: images, y: labels})
-
                         print "Iter " + str(iters) + ", Minibatch Loss= " + "{:.6f}".format(
-                            loss_np) + ", Training Accuracy= " + "{:.5f}".format(acc)
+                            avg_loss/step) + ", Training Accuracy= " + "{:.5f}".format(avg_acc/step)
 
                     s = sess.run(merged_summary, feed_dict={x: images, y: labels})
                     writer.add_summary(s, iters)
@@ -106,17 +106,20 @@ def train(batch_size, save_path, dropoutPro):
                     print("{} Model checkpoint saved at {}".format(datetime.now(), checkpoint_name))
 
                     # test the model
+                    test_loss = 0
                     test_acc = 0
                     count = 0
                     test_batches_per_epoch = np.floor(test_data.data_size / batch_size).astype(np.int16)
                     for i in range(test_batches_per_epoch):
                         test_images, test_labels = test_data.next_batch(batch_size)
-                        acc = sess.run(accuracy, feed_dict={x: test_images, y: test_labels})
+                        loss_np_test, acc = sess.run(loss, accuracy, feed_dict={x: test_images, y: test_labels})
+                        test_loss += loss_np_test
                         test_acc += acc
                         count += 1
 
                     test_acc = test_acc/count
-                    print "{}".format(datetime.now()) + " Test Accuracy= " + "{:.5f}".format(test_acc)
+                    test_loss = test_loss/count
+                    print "{}".format(datetime.now()) + " Test Loss= " + "{:.6f}".format(test_loss) + " Test Accuracy= " + "{:.5f}".format(test_acc)
 
         except tf.errors.OutOfRangeError:
 
