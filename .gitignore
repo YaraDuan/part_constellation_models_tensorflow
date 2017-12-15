@@ -11,6 +11,7 @@
 /data/plane23/V8
 /data/plane23/val
 /data/MNIST_data
+/data/CUB_200_2011/flip
 *imagenet-vgg-verydeep-19.mat*
 *planenet2_mean.binaryproto*
 *.DS_Store*

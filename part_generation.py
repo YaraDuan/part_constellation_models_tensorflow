@@ -8,25 +8,7 @@ import cv2
 from pylab import *
 from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
-
-IMAGE_W = 800
-IMAGE_H = 600
-ROOT = '/home/alala/Projects/part_constellation_models_tensorflow'
-CONTENT_IMG = ROOT + '/images/Taipei101.jpg'
-OUTOUT_DIR = ROOT + '/results'
-OUTPUT_IMG = 'results.png'
-OUTPUT_MAT = 'results.mat'
-VGG_MODEL = 'imagenet-vgg-verydeep-19.mat'
-INI_NOISE_RATIO = 0.7
-STYLE_STRENGTH = 500
-ITERATION = 5000
-
-LAYERS = ['pool5']
-
-CONTENT_LAYERS =[('conv4_2',1.)]
-
-MEAN_VALUES = np.array([123, 117, 104]).reshape((1, 1, 1, 3))
-
+from model.vgg19.vgg19 import *
 
 def build_net(ntype, nin, nwb=None):
     if ntype == 'conv':
@@ -105,18 +87,20 @@ def write_image(path, image):
     scipy.misc.imsave(path, image)
 
 
-def get_gradients():
+def get_gradients(batch_size, image, net, model_path):
 
     gmaps = []
 
-    batch_size = 64
+    saver = tf.train.Saver()
 
     for batch_id in range(512 / batch_size):
 
-        net = build_vgg19(VGG_MODEL)
         sess = tf.Session()
         sess.run(tf.global_variables_initializer())
-        content_img = read_image(CONTENT_IMG)
+
+        saver.restore(sess, model_path)
+
+        content_img = read_image(image)
 
         sess.run([net['input'].assign(content_img)])
 
@@ -158,15 +142,31 @@ def fitGMMToGradient(gmap):
     return est_x, est_y
 
 
-def part_generation():
+def part_generation(batch_size, crop_w, crop_h, classNum, dropoutPro, skip):
 
-    imagelist = 1
+    checkpoint_path = ROOT + "/model/vgg19/checkpoints/CUB_200_2011/"
+
+    model_path = checkpoint_path + '/model_epoch20.ckpt'
+
+    x = tf.placeholder(tf.float32, [1, crop_h, crop_w, 3], name="input_x")
+    y = tf.placeholder(tf.int32, [1, classNum], name="input_y")
+
+    # create the network
+    net = VGG19(x, dropoutPro, classNum, skip)
+
+    # get image list
+    image_path = ROOT + '/data/CUB_200_2011/imagelist_absolute.txt'
+    imagelist = []
+
+    lines = open(image_path).readlines()
+    for line in lines:
+        imagelist.append(line)
 
     part_locs = []
-    """
-    for i in range(imagelist):
 
-        g = get_gradients()
+    for i in imagelist:
+
+        g = get_gradients(batch_size, i, net, model_path)
 
         for p in range(512):
 
@@ -183,30 +183,50 @@ def part_generation():
                 part_locs.append([i, p, est_x, est_y, 1])
 
     scipy.io.savemat(os.path.join(OUTOUT_DIR, 'part_locs.mat'), {'part_locs': part_locs})
-    """
+
     part_locs = scipy.io.loadmat(os.path.join(OUTOUT_DIR, 'part_locs.mat'))
 
     part_locs = part_locs['part_locs']
 
     # draw the dots
-    im = plt.imread(CONTENT_IMG)
-    plt.figure(), plt.imshow(im)
+    for n in range(len(imagelist)):
+        im = plt.imread(imagelist[n])
+        plt.figure(), plt.imshow(im)
 
-    for i in range(len(part_locs)):
+        for i in range(len(part_locs)):
+            info = part_locs[i]
 
-        info = part_locs[i]
+            x = info[2]
 
-        x = info[2]
+            y = info[3]
 
-        y = info[3]
+            plt.plot(x, y, 'rx')
 
-        plt.plot(x, y, 'rx')
-
-    plt.show()
-    plt.imsave(os.path.join(OUTOUT_DIR, OUTPUT_IMG), im)
+        plt.show()
+        outpath = OUTOUT_DIR + str(n) + OUTPUT_IMG
+        plt.imsave(outpath, im)
 
     return part_locs
 
 
-#if __name__ == '__main__':
-#    main()
+if __name__ == '__main__':
+
+    CROP_H = 224
+    CROP_W = 224
+    ROOT = '/home/alala/Projects/part_constellation_models_tensorflow'
+    OUTOUT_DIR = ROOT + '/results'
+    OUTPUT_IMG = 'results.png'
+    OUTPUT_MAT = 'results.mat'
+    VGG_MODEL = 'imagenet-vgg-verydeep-19.mat'
+
+    # params
+    batch_size = 64
+    classNum = 200
+    dropoutPro = 0.5
+    skip = []
+
+    LAYERS = ['pool5']
+
+    MEAN_VALUES = np.array([123, 117, 104]).reshape((1, 1, 1, 3))
+
+    part_generation(batch_size, CROP_H, CROP_W, classNum, dropoutPro, skip)
